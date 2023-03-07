@@ -1,5 +1,6 @@
 # Data is too big to store in repo
 data/
+tmp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
