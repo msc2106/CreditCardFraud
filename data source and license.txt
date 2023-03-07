@@ -1,5 +1,7 @@
 Data source: Erik R. Altman, 2019, "Synthesizing Credit Card Transactions," https://arxiv.org/abs/1910.03033, accessed 2023-03-07.
 
+Data archive originally downloaded on 2023-03-07 from: https://www.kaggle.com/datasets/ealtman2019/credit-card-transactions
+
 The data in the project is used under the following license:
 
 Copyright 2019 Erik R. Altman
