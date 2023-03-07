@@ -60,6 +60,11 @@ def raw_data_on_disk():
     # Remove the archive file
     os.remove(zip_file_name)
 
+def get_MCC_codes() -> pd.DataFrame:
+    # as plaintext csv: https://github.com/greggles/mcc-codes/blob/main/mcc_codes.csv
+    # or a python package with some more data: https://pypi.org/project/iso18245/
+    ...
+
 def read_sample_transactions() -> pd.DataFrame:
     """
     Loads the transactions for User 0 into a data frame.
