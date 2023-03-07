@@ -67,10 +67,10 @@ def read_sample_transactions() -> pd.DataFrame:
     return pd.read_csv(data_dir + '/' + data_files['sample_tx'])
 
 def read_users() -> pd.DataFrame:
-    pass
+    ...
 
 def read_cards() -> pd.DataFrame:
-    pass
+    ...
 
 def make_txdata_reader(**kwargs):
     """
