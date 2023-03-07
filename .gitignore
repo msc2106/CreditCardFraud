@@ -1,3 +1,6 @@
+# Data is too big to store in repo
+data/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
