@@ -72,17 +72,23 @@ def read_sample_transactions() -> pd.DataFrame:
     return pd.read_csv(data_dir + '/' + data_files['sample_tx'])
 
 def read_users() -> pd.DataFrame:
-    ...
+    """
+    Loads the users table into a data frame.
+    """
+    return pd.read_csv(data_dir+'/'+data_files['users'])
 
 def read_cards() -> pd.DataFrame:
-    ...
+    """
+    Loads the cards table into a data frame.
+    """
+    return pd.read_csv(data_dir+'/'+data_files['cards'])
 
 def make_txdata_reader(**kwargs):
     """
     Returns an iterator to read chunks of the main transaction data file. The default chunk size is 10,000, but alternative values for `chunksize` or for any other parameter of `pd.read_csv` can be pased as named arguments.
     """
     params = {
-        "chunksize": 10000
+        "chunksize": 100000
     }
     params.update(kwargs)
     return pd.read_csv(data_dir+'/'+data_files["full_tx"], **params)
