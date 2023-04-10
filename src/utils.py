@@ -102,12 +102,8 @@ def save_data(dfdict):
     for filename, df in dfdict.items():
         df.to_csv(dirname+'/'+filename)
 
-def load_data(filenames):
+def prepend_dir(filename):
     """
-    Loads the indicated files from `../data/process/`
+    Prepnds `../data/process/` to the filename
     """
-    dirname = "../data/processed"
-    loaded = []
-    for filename in filenames:
-        loaded.append(pd.read_csv(dirname+'/'+filename))
-    return loaded
+    return '../data/processed/' + filename
