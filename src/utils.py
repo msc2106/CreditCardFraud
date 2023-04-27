@@ -12,6 +12,16 @@ data_files = {
     "sample_tx": "User0_credit_card_transactions.csv"
 }
 
+###########################
+# LOADING AND SAVING DATA #
+###########################
+
+def prepend_dir(filename):
+    """
+    Prepnds `../data/process/` to the filename
+    """
+    return '../data/processed/' + filename
+
 def confirm_dirs(path):
     dirs = path.split('/')
     if dirs[0] == '..':
@@ -60,11 +70,6 @@ def raw_data_on_disk():
     # Remove the archive file
     os.remove(zip_file_name)
 
-def get_MCC_codes() -> pd.DataFrame:
-    # as plaintext csv: https://github.com/greggles/mcc-codes/blob/main/mcc_codes.csv
-    # or a python package with some more data: https://pypi.org/project/iso18245/
-    ...
-
 def read_sample_transactions() -> pd.DataFrame:
     """
     Loads the transactions for User 0 into a data frame.
@@ -93,6 +98,7 @@ def make_txdata_reader(**kwargs):
     params.update(kwargs)
     return pd.read_csv(data_dir+'/'+data_files["full_tx"], **params)
 
+
 def save_data(dfdict):
     """
     Saves data to `../data/processed`. The keys of the `datafiles` dict are taken to be the filenames, and the values are assumed to be data frames
@@ -102,8 +108,85 @@ def save_data(dfdict):
     for filename, df in dfdict.items():
         df.to_csv(dirname+'/'+filename)
 
-def prepend_dir(filename):
+#################
+# DATA CLEANING #
+#################
+
+def update_colnames(old_colnames):
+    return (
+        old_colnames
+        .str.lower()
+        .str.replace(' - ', '_', regex=False)
+        .str.replace(' ', '_', regex=False)
+        .str.replace('?', '', regex=False)
+    )
+
+
+def mm_yyyy_to_dt(mm_yyyy: str) -> pd.Timestamp:
     """
-    Prepnds `../data/process/` to the filename
+    Takes a date string in the format `mm/yyyy` and returns a Pandas Timestamp object for 1/m/y
     """
-    return '../data/processed/' + filename
+    m, y = map(int, mm_yyyy.split('/'))
+    return pd.Timestamp(
+        year=y,
+        month=m,
+        day=1
+    )
+
+
+def convert_monthyear_dates(column: pd.Series):
+    return column.apply(mm_yyyy_to_dt)
+
+
+def convert_dollar_amounts(column: pd.Series) -> pd.Series:
+    if column.dtype in ['float', 'int']:
+        return column
+    else:
+        return column.str.slice(1).astype('float')
+
+
+def make_timestamps(df: pd.DataFrame):
+    datetime_df = df[['year', 'month', 'day']].copy()
+    if len(datetime_df) > 0:
+        datetime_df[['hour', 'minute']] = df.time.str.split(':', expand=True)
+        datetime_df['hour'] = datetime_df.hour.apply(int)
+        datetime_df['minute'] = datetime_df.minute.apply(int)
+    return pd.to_datetime(datetime_df)
+
+
+def clean_tx_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Carries out the operations to clean the transactions data frame:
+    - change column names
+    - convert `amount` to float
+    - make a timestamp column
+    - make `tx_type` categorical feature
+    - convert `is_fraud` to bool
+    """
+    # Updating the column names
+    df.columns = update_colnames(df.columns)
+    # if df.shape[0] == 0:
+    #     return df
+    # Converting transactions to float
+    df.amount = df.amount.str.slice(1)\
+        .astype('float')
+    # Making a timestamp column
+    df['timestamp'] = make_timestamps(df)
+    # Creating the tx_type categorical feature
+    df['tx_type'] = df.use_chip\
+        .str.strip(" Transaction")\
+        .str.lower()\
+        .astype("category")
+    df.drop('use_chip', axis=1)
+    # Converting the is_fraud to bool
+    df.is_fraud = df.is_fraud == 'Yes'
+    return df
+
+
+
+
+def get_MCC_codes() -> pd.DataFrame:
+    # as plaintext csv: https://github.com/greggles/mcc-codes/blob/main/mcc_codes.csv
+    # or a python package with some more data: https://pypi.org/project/iso18245/
+    ...
+
