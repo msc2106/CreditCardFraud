@@ -177,7 +177,7 @@ def clean_tx_df(df: pd.DataFrame) -> pd.DataFrame:
         .str.strip(" Transaction")\
         .str.lower()\
         .astype("category")
-    df.drop('use_chip', axis=1)
+    df.drop(['year', 'month', 'day', 'time', 'merchant_name', 'use_chip'], axis=1, inplace=True)
     # Converting the is_fraud to bool
     df.is_fraud = df.is_fraud == 'Yes'
     return df
