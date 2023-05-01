@@ -183,6 +183,12 @@ def clean_tx_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def convert_errors(df: pd.DataFrame) -> pd.DataFrame:
+    errors = set()
+    for entry in df.errors.dropna().unique().tolist():
+        for error in entry.split(','):
+            errors.add(error)
+    return df
 
 
 def get_MCC_codes() -> pd.DataFrame:
