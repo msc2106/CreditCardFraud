@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from urllib import request
 from zipfile import ZipFile
+from typing import Tuple
 
 # file locations for general use
 data_dir = "../data/raw"
@@ -183,12 +184,19 @@ def clean_tx_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def convert_errors(df: pd.DataFrame) -> pd.DataFrame:
-    errors = set()
-    for entry in df.errors.dropna().unique().tolist():
-        for error in entry.split(','):
-            errors.add(error)
-    return df
+def convert_multicat(df: pd.DataFrame, colname: str) -> Tuple[pd.DataFrame, list]:
+    '''Copies `df`  and converts the categorical column `colname` has been converted into dummies. Allows for membership in multiple categories separated by a single comma, e.g. entry "a,b" will be converted into `True` for columns `a` and `b`'''
+    dummy_df = df.copy()
+    cats = set()
+    for entry in dummy_df[colname].dropna().unique().tolist():
+        for cat in entry.split(','):
+            cats.add(cat)
+    cats = list(cats)
+    for cat in cats:
+        dummy_df[colname] = dummy_df[colname].str.contains(cat).fillna(False)
+    dummy_df.drop(columns=colname, inplace=True)
+    return dummy_df, cats
+
 
 
 def get_MCC_codes() -> pd.DataFrame:
