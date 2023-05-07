@@ -1,8 +1,10 @@
 import os
 import pandas as pd
+import numpy as np
 from urllib import request
 from zipfile import ZipFile
-from typing import Tuple, Set
+from typing import Tuple, Union, List
+from sklearn.base import BaseEstimator, TransformerMixin
 
 # file locations for general use
 data_dir = "../data/raw"
@@ -110,23 +112,48 @@ def save_data(dfdict, **kwargs):
         df.to_csv(dirname+'/'+filename, **kwargs)
 
 
-def make_training_sets(subset_ids, pos_filename, neg_filename, rate):
+def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[str, str, str]:
     """
-    Constructs and saves two training data sets from the full training data recorded in `pos_filename` and `neg_filename`:
+    Constructs and saves two training data sets from the full training data recorded in `pos_filename` and `neg_filename`, returning 3 file name:
     - An unbalanced set containing users in `subset_ids`
     - A balanced set combining all positive cases and negative cases selected at `rate`
+    - The fraud rates by MCC code
     """
+    rng = np.random.default_rng(22)
     subset_name = prepend_dir('tx_train_set.csv')
     balanced_name = prepend_dir('tx_train_balanced.csv')
-    balanced_df = pd.read_csv(pos_filename, index_col=0)
-    subset_df = balanced_df[balanced_df.user.isn(subset_ids)].copy()
-    ...
-    # TODO
-  
+    mcc_rates_name = prepend_dir('mcc_rates.csv')
 
-def clean_split_tx(users_cards_df: pd.DataFrame, test_ids):
+    balanced_df = pd.read_csv(pos_filename, index_col=0)
+    subset_df = balanced_df[balanced_df.user.isin(subset_ids)].copy()
+
+    mcc_dict = {}
+    update_mcc(balanced_df, mcc_dict)
+
+    reader = pd.read_csv(neg_filename, index_col=0, chunksize=100_000)
+    for df in reader:
+        n_records = len(df.index)
+        idx_for_balance = rng.choice([False, True], n_records, replace=True, p=[1-rate, rate])
+        balanced_df = pd.concat([balanced_df, df.loc[idx_for_balance]])
+        
+        update_mcc(df, mcc_dict)
+
+        subset_df = pd.concat([subset_df, df[df.user.isin(subset_ids)]])
+    
+    subset_df.to_csv(subset_name)
+    balanced_df.to_csv(balanced_name)
+
+    mcc_rates = pd.DataFrame.from_dict(mcc_dict, orient='index')
+    # print(mcc_rates.head())
+    mcc_rates['mcc_fraud_rate'] = mcc_rates['pos'] / mcc_rates['n']
+    mcc_rates[['mcc_fraud_rate']].to_csv(mcc_rates_name)
+
+    return subset_name, balanced_name, mcc_rates_name
+    
+
+def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[str, str, float]:
     """
-    Processes raw transaction data and splits into test set (comprised of users in `test_ids`) and full training set (the rest).
+    Processes raw transaction data and splits into test set (comprised of users in `test_ids`) and full training set (the rest). Returns: the file names for the positive and negative training data, and the rate of positive fraud cases in the training data.
     """
     raw_data_on_disk()
     save_file_pos = prepend_dir('tx_train_pos.csv')
@@ -154,12 +181,8 @@ def clean_split_tx(users_cards_df: pd.DataFrame, test_ids):
         
         # after first iteration mode is append and header should not be written
         writing_args = {'mode': 'a', 'header':False}
-    metadata = {
-        "pos_filename": save_file_pos,
-        "neg_filename": save_file_neg,
-        "rate": pos_count / n
-    }
-    return metadata
+
+    return save_file_pos, save_file_neg, pos_count / n
 
 
 #################
@@ -259,20 +282,77 @@ def user_features(df: pd.DataFrame) -> pd.DataFrame:
     return merged_df
 
 
-#TODO make into a scikitlearn transformer class
-def convert_multicat(df: pd.DataFrame, colname: str) -> Tuple[pd.DataFrame, list]:
-    '''Copies `df`  and converts the categorical column `colname` has been converted into dummies. Allows for membership in multiple categories separated by a single comma, e.g. entry "a,b" will be converted into `True` for columns `a` and `b`'''
-    dummy_df = df.copy()
+#TODO make into a scikitlearn transformer class?
+def convert_multicat(df: pd.DataFrame, colname: str, copy:bool=True) -> Tuple[pd.DataFrame, List[str]]:
+    '''(Optionally copies `df` and) converts the categorical column `colname` into dummies. Allows for membership in multiple categories separated by a single comma, e.g. entry "a,b" will be converted into `True` for columns `a` and `b`'''
+    if copy:
+        dummy_df = df.copy()
+    else:
+        dummy_df = df
     cats = set()
     for entry in dummy_df[colname].dropna().unique().tolist():
         for cat in entry.split(','):
             cats.add(cat)
     cats = list(cats)
     for cat in cats:
-        dummy_df[colname] = dummy_df[colname].str.contains(cat).fillna(False)
+        dummy_df[cat] = dummy_df[colname].str.contains(cat).fillna(False)
     dummy_df.drop(columns=colname, inplace=True)
+
     return dummy_df, cats
 
+
+def update_mcc(new_data, mcc_dict):
+    fraud_totals = (
+        new_data[['mcc', 'is_fraud']]
+            .groupby('mcc')
+            .agg(['sum', 'count'])
+            ['is_fraud']
+    )
+    # fraud_totals = fraud_totals['is_fraud']
+    # print(fraud_totals)
+    for mcc, data in fraud_totals.iterrows():
+        # print(data)
+        if mcc in mcc_dict:
+            mcc_dict[mcc]['pos'] += data['sum']
+            mcc_dict[mcc]['n'] += data['count']
+        else:
+            mcc_dict[mcc] = {
+                'pos': data['sum'],
+                'n': data['count']
+            }
+
+
+class MakeDummies(BaseEstimator, TransformerMixin):
+    """Transforms categorical columns into dummies. Can handle multi-category columns"""
+    def __init__(self, multicat_col: str, drop_first=True, dummy_cols:Union[List[str], str]='auto') -> None:
+        super().__init__()
+        self.multicat_col = multicat_col
+        self.drop_first = drop_first
+    
+    def fit(self, X, y=None):
+        _, self.cats = convert_multicat(X, self.multicat_col)
+        return self
+    
+    def fit_transform(self, X, y=None):
+        dummy_df, self.cats = convert_multicat(X, self.multicat_col)
+        dummy_df = pd.get_dummies(dummy_df, drop_first=self.drop_first)
+        return dummy_df
+    
+    def transform(self, X, y=None):
+        dummy_df = X.copy()
+        for cat in self.cats:
+            dummy_df[cat] = dummy_df[self.multicat_col].str.contains(cat).fillna(False)
+        dummy_df.drop(columns=self.multicat_col, inplace=True)
+        dummy_df = pd.get_dummies(dummy_df, drop_first=self.drop_first)
+
+        return dummy_df
+
+
+def merge_mcc_rates(df: pd.DataFrame) -> pd.DataFrame:
+    mcc_fraud_rates = pd.read_csv(prepend_dir('mcc_rates.csv'), index_col=0)
+    merged_df = df.merge(mcc_fraud_rates, how='left', left_on='mcc', right_index=True)
+    merged_df.drop(columns='mcc', inplace=True)
+    return merged_df
 
 
 def get_MCC_codes() -> pd.DataFrame:
