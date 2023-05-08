@@ -112,6 +112,46 @@ def save_data(dfdict, **kwargs):
         df.to_csv(dirname+'/'+filename, **kwargs)
 
 
+def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[str, str, float]:
+    """
+    Processes raw transaction data and splits into test set (comprised of users in `test_ids`) and full training set (the rest). Returns: the file names for the positive and negative training data, and the rate of positive fraud cases in the training data.
+    """
+    raw_data_on_disk()
+    save_file_pos = prepend_dir('tx_train_pos.csv')
+    save_file_neg = prepend_dir('tx_train_neg.csv')
+    test_file = prepend_dir('tx_test.csv')
+    pos_count = 0
+    n = 0
+    reader = make_txdata_reader()
+    # in first iteration, overwrite file and write header
+    writing_args = {'mode':'w', 'header':True}
+    for df in reader:
+        # read in the next training data
+        df = next(reader)
+        # clean the data
+        df = clean_tx_df(df)
+        # merge in users and cards features
+        df = df.merge(users_cards_df, how='left', on=['user', 'card'])
+        # construct needed features
+        df = user_features(df)
+
+        # filter and save data from users in the test set
+        test_df = df[df.user.isin(test_ids)]
+        test_df.to_csv(test_file, **writing_args)
+
+        # split the training pool into fraud and non-fraud observations
+        train_df = df[~df.user.isin(test_ids)]
+        pos_count += train_df.is_fraud.sum()
+        n += train_df.is_fraud.count()
+        train_df[train_df.is_fraud].to_csv(save_file_pos, **writing_args)
+        train_df[~train_df.is_fraud].to_csv(save_file_neg, **writing_args)
+        
+        # after first iteration mode is append and header should not be written
+        writing_args = {'mode': 'a', 'header':False}
+
+    return save_file_pos, save_file_neg, pos_count / n
+
+
 def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[str, str, str]:
     """
     Constructs and saves two training data sets from the full training data recorded in `pos_filename` and `neg_filename`, returning 3 file name:
@@ -133,6 +173,7 @@ def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[st
     reader = pd.read_csv(neg_filename, index_col=0, chunksize=100_000)
     for df in reader:
         n_records = len(df.index)
+        # choose negative cases to include based on given fraud rate
         idx_for_balance = rng.choice([False, True], n_records, replace=True, p=[1-rate, rate])
         balanced_df = pd.concat([balanced_df, df.loc[idx_for_balance]])
         
@@ -140,7 +181,10 @@ def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[st
 
         subset_df = pd.concat([subset_df, df[df.user.isin(subset_ids)]])
     
+    subset_df.sort_values(['user', 'card'], inplace=True)
     subset_df.to_csv(subset_name)
+
+    balanced_df.sort_values(['user', 'card'], inplace=True)
     balanced_df.to_csv(balanced_name)
 
     mcc_rates = pd.DataFrame.from_dict(mcc_dict, orient='index')
@@ -150,40 +194,6 @@ def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[st
 
     return subset_name, balanced_name, mcc_rates_name
     
-
-def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[str, str, float]:
-    """
-    Processes raw transaction data and splits into test set (comprised of users in `test_ids`) and full training set (the rest). Returns: the file names for the positive and negative training data, and the rate of positive fraud cases in the training data.
-    """
-    raw_data_on_disk()
-    save_file_pos = prepend_dir('tx_train_pos.csv')
-    save_file_neg = prepend_dir('tx_train_neg.csv')
-    test_file = prepend_dir('tx_test.csv')
-    pos_count = 0
-    n = 0
-    reader = make_txdata_reader()
-    # in first iteration, overwrite file and write header
-    writing_args = {'mode':'w', 'header':True}
-    for df in reader:
-        df = next(reader)
-        df = clean_tx_df(df)
-        df = df.merge(users_cards_df, how='left', on=['user', 'card'])
-        df = user_features(df)
-
-        test_df = df[df.user.isin(test_ids)]
-        test_df.to_csv(test_file, **writing_args)
-
-        train_df = df[~df.user.isin(test_ids)]
-        pos_count += train_df.is_fraud.sum()
-        n += train_df.is_fraud.count()
-        train_df[train_df.is_fraud].to_csv(save_file_pos, **writing_args)
-        train_df[~train_df.is_fraud].to_csv(save_file_neg, **writing_args)
-        
-        # after first iteration mode is append and header should not be written
-        writing_args = {'mode': 'a', 'header':False}
-
-    return save_file_pos, save_file_neg, pos_count / n
-
 
 #################
 # DATA CLEANING #
