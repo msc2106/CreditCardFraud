@@ -292,7 +292,6 @@ def user_features(df: pd.DataFrame) -> pd.DataFrame:
     return merged_df
 
 
-#TODO make into a scikitlearn transformer class?
 def convert_multicat(df: pd.DataFrame, colname: str, copy:bool=True) -> Tuple[pd.DataFrame, List[str]]:
     '''(Optionally copies `df` and) converts the categorical column `colname` into dummies. Allows for membership in multiple categories separated by a single comma, e.g. entry "a,b" will be converted into `True` for columns `a` and `b`'''
     if copy:
@@ -356,6 +355,38 @@ class MakeDummies(BaseEstimator, TransformerMixin):
         dummy_df = pd.get_dummies(dummy_df, drop_first=self.drop_first)
 
         return dummy_df
+
+
+class MCCRates(BaseEstimator, TransformerMixin):
+    """Transforms MCC codes into average fraud rates, based on saved data or a specific training set. Note: only accepts data frames"""
+    
+    mcc_rates_file = prepend_dir('mcc_rates.csv')
+    
+    def __init__(self, use_saved=True) -> None:
+        super().__init__()
+        self.use_saved = use_saved
+
+
+    def fit(self, X, y=None):
+        if self.use_saved:
+            self.mcc_rates = pd.read_csv(self.mcc_rates_file, index_col=0)
+        else:
+            self.mcc_rates = (
+                X.copy()
+                .groupby('mcc')
+                .agg('mean')
+                .rename({'mean':'mcc_fraud_rate'}, axis=1)
+            )
+        return self
+    
+    def fit_transform(self, X, y=None):
+        self.fit(X)
+        return self.transform(X)
+
+    def transform(self, X, y=None):
+        X_transformed = X.merge(self.mcc_rates, how='left', left_on='mcc', right_index=True)
+        X_transformed.drop(columns='mcc', inplace=True)
+        return X_transformed
 
 
 def merge_mcc_rates(df: pd.DataFrame) -> pd.DataFrame:
