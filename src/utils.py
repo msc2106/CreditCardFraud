@@ -4,7 +4,7 @@ import numpy as np
 from urllib import request
 from zipfile import ZipFile
 from typing import Tuple, Union, List
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
 
 # file locations for general use
 data_dir = "../data/raw"
@@ -337,6 +337,7 @@ class MakeDummies(BaseEstimator, TransformerMixin):
         super().__init__()
         self.multicat_col = multicat_col
         self.drop_first = drop_first
+        self.dummy_cols= dummy_cols
     
     def fit(self, X, y=None):
         _, self.cats = convert_multicat(X, self.multicat_col)
@@ -365,11 +366,12 @@ class MCCRates(BaseEstimator, TransformerMixin):
     def __init__(self, use_saved=True) -> None:
         super().__init__()
         self.use_saved = use_saved
-
+        self.mcc_rates = None
 
     def fit(self, X, y=None):
         if self.use_saved:
-            self.mcc_rates = pd.read_csv(self.mcc_rates_file, index_col=0)
+            if self.mcc_rates is None:
+                self.mcc_rates = pd.read_csv(self.mcc_rates_file, index_col=0)
         else:
             self.mcc_rates = (
                 X.copy()
@@ -401,3 +403,22 @@ def get_MCC_codes() -> pd.DataFrame:
     # or a python package with some more data: https://pypi.org/project/iso18245/
     ...
 
+
+##########
+# MODELS #
+##########
+
+class NaiveClassifier(BaseEstimator, ClassifierMixin):
+    def fit(self, X, y):
+        self.rng = np.random.default_rng()
+        return self
+
+    def predict(self, X):
+        return (self.predict_proba(X) > 0.5).astype('int')
+    
+    def predict_proba(self, X):
+        return self.rng.random(len(X))
+    
+    def fit_predict(self, X, y):
+        _ = self.fit(X, y)
+        return self.predict(X)
