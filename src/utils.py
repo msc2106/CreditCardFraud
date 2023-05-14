@@ -411,10 +411,11 @@ def get_MCC_codes() -> pd.DataFrame:
 class NaiveClassifier(BaseEstimator, ClassifierMixin):
     def fit(self, X, y):
         self.rng = np.random.default_rng()
+        self.classes_ = np.unique(y)
         return self
 
     def predict(self, X):
-        return (self.predict_proba(X) > 0.5).astype('int')
+        return (self.predict_proba(X)[:,1] > 0.5).astype('int')
     
     def predict_proba(self, X):
         proba = self.rng.random(len(X))
