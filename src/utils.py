@@ -417,7 +417,8 @@ class NaiveClassifier(BaseEstimator, ClassifierMixin):
         return (self.predict_proba(X) > 0.5).astype('int')
     
     def predict_proba(self, X):
-        return self.rng.random(len(X))
+        proba = self.rng.random(len(X))
+        return np.array([proba, 1-proba]).T
     
     def fit_predict(self, X, y):
         _ = self.fit(X, y)
