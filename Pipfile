@@ -12,6 +12,7 @@ matplotlib = "*"
 seaborn = "*"
 notebook = "*"
 xgboost = "*"
+bayesian-optimization = "*"
 
 [dev-packages]
 

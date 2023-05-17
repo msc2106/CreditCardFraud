@@ -1,4 +1,6 @@
 import os
+import pickle
+import time
 import pandas as pd
 import numpy as np
 from urllib import request
@@ -14,6 +16,7 @@ data_files = {
     "users": "sd254_users.csv",
     "sample_tx": "User0_credit_card_transactions.csv"
 }
+model_dir = "../models"
 
 ###########################
 # LOADING AND SAVING DATA #
@@ -193,7 +196,14 @@ def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[st
     mcc_rates[['mcc_fraud_rate']].to_csv(mcc_rates_name)
 
     return subset_name, balanced_name, mcc_rates_name
-    
+
+
+def save_model(name, model):
+    confirm_dirs(model_dir)
+    filename = model_dir+'/'+name+time.strftime(r'%Y%m%d%H%M',time.localtime())+'.pkl'
+    with open(filename, 'wb') as f:
+        pickle.dump(model, f)
+
 
 #################
 # DATA CLEANING #
