@@ -1,0 +1,52 @@
+****Model information****
+Model type: XGBoost
+Tuned hyperparameters:
+    learning_rate: 0.029992608994468213,
+    max_depth: 11,
+    min_child_weight': 26
+Test performance:
+    f1 score: 0.9254911754692154
+    precision with 75% recall of true positives: 0.0823647915698125
+    ROC-AUC: 0.93
+Features fit in descending order of importance:
+    home_state	0.707512
+    home_city	0.098572
+    home_zip	0.066082
+    overseas	0.035558
+    mcc_fraud_rate	0.016428
+    tx_type_swipe	0.010795
+    tx_type_online	0.009789
+    tx_type_chip	0.009496
+    amount	0.004250
+    card_type_Debit (Prepaid)	0.004154
+    until_expired	0.003328
+    per_capita_income_zipcode	0.003255
+    has_chip	0.002937
+    num_credit_cards	0.002443
+    longitude	0.002067
+    cards_issued	0.001964
+    fico_score	0.001929
+    latitude	0.001853
+    card_brand_Visa	0.001804
+    credit_limit	0.001775
+    card	0.001729
+    since_opened	0.001717
+    user	0.001494
+    total_debt	0.001447
+    card_brand_Mastercard	0.001433
+    card_type_Credit	0.001357
+    yearly_income_person	0.001331
+    gender_Female	0.001287
+    user_age	0.001265
+    card_type_Debit	0.000949
+    Technical Glitch	0.000000
+    card_brand_Discover	0.000000
+    card_brand_Amex	0.000000
+    Bad CVV	0.000000
+    retired	0.000000
+    Bad Zipcode	0.000000
+    Bad Expiration	0.000000
+    Insufficient Balance	0.000000
+    Bad PIN	0.000000
+    Bad Card Number	0.000000
+    gender_Male	0.000000
