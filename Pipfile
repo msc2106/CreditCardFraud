@@ -13,6 +13,7 @@ seaborn = "*"
 notebook = "*"
 xgboost = "*"
 bayesian-optimization = "*"
+tensorflow = "*"
 
 [dev-packages]
 
