@@ -7,39 +7,34 @@ from urllib import request
 from zipfile import ZipFile
 from typing import Tuple, Union, List
 from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
+from pathlib import Path
 
 # file locations for general use
-data_dir = "../data/raw"
+data_dir = Path("..") / "data" / "raw"
 data_files = {
-    "full_tx": "credit_card_transactions-ibm_v2.csv",
-    "cards": "sd254_cards.csv",
-    "users": "sd254_users.csv",
-    "sample_tx": "User0_credit_card_transactions.csv"
+    "full_tx": data_dir / "credit_card_transactions-ibm_v2.csv",
+    "cards": data_dir / "sd254_cards.csv",
+    "users": data_dir / "sd254_users.csv",
+    "sample_tx": data_dir / "User0_credit_card_transactions.csv"
 }
-model_dir = "../models"
+model_dir = Path("..") / "models"
+tmp_dir = Path("..") / "tmp"
 
 ###########################
 # LOADING AND SAVING DATA #
 ###########################
 
-def prepend_dir(filename):
+def prepend_dir(filename:str):
     """
     Prepends `../data/processed/` to the filename
     """
-    return '../data/processed/' + filename
+    return Path('..') / 'data' / 'processed' / filename
 
-def confirm_dirs(path):
-    dirs = path.split('/')
-    if dirs[0] == '..':
-        dirs = dirs[1:]
-    base_dir = ".."
-    for dirname in dirs:
-        if dirname not in os.listdir(base_dir):
-            os.mkdir(base_dir+'/'+dirname)
-        base_dir += '/' + dirname
+def confirm_dirs(path:Path):
+    path.mkdir(parents=True, exist_ok=True)
 
 def data_files_present() -> bool:
-    return set(os.listdir(data_dir)).issuperset(data_files.values())
+    return all(file.exists() for file in data_files.values())
 
 def raw_data_on_disk():
     """
@@ -58,9 +53,9 @@ def raw_data_on_disk():
         return
     # If not, download the data archive
     print("Downloading data.")
-    confirm_dirs("tmp")
+    confirm_dirs(tmp_dir)
     url = "https://drive.google.com/uc?export=download&id=1hQR9dMRUv-E0g1zYvPcOYVLk1UH_7OP8&confirm=t&uuid=8b31db11-9b77-4e9d-b104-797d165bbda0"
-    zip_file_name = "../tmp/data_archive.zip"
+    zip_file_name = tmp_dir / "data_archive.zip"
     downloaded, _ = request.urlretrieve(url, zip_file_name)
     print(f"Downloaded {downloaded}")   
     # Unzip the archive
@@ -80,19 +75,19 @@ def read_sample_transactions() -> pd.DataFrame:
     """
     Loads the transactions for User 0 into a data frame.
     """
-    return pd.read_csv(data_dir + '/' + data_files['sample_tx'])
+    return pd.read_csv(data_files['sample_tx'])
 
 def read_users() -> pd.DataFrame:
     """
     Loads the users table into a data frame.
     """
-    return pd.read_csv(data_dir+'/'+data_files['users'])
+    return pd.read_csv(data_files['users'])
 
 def read_cards() -> pd.DataFrame:
     """
     Loads the cards table into a data frame.
     """
-    return pd.read_csv(data_dir+'/'+data_files['cards'])
+    return pd.read_csv(data_files['cards'])
 
 def make_txdata_reader(**kwargs):
     """
@@ -102,20 +97,20 @@ def make_txdata_reader(**kwargs):
         "chunksize": 100_000
     }
     params.update(kwargs)
-    return pd.read_csv(data_dir+'/'+data_files["full_tx"], **params)
+    return pd.read_csv(data_files["full_tx"], **params) # type: ignore
 
 
 def save_data(dfdict, **kwargs):
     """
     Saves data to `../data/processed`. The keys of the `datafiles` dict are taken to be the filenames, and the values are assumed to be data frames
     """
-    dirname = "../data/processed"
+    dirname = Path("..") / "data" / "processed"
     confirm_dirs(dirname)
     for filename, df in dfdict.items():
-        df.to_csv(dirname+'/'+filename, **kwargs)
+        df.to_csv(dirname / filename, **kwargs)
 
 
-def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[str, str, float]:
+def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[Path, Path, float]:
     """
     Processes raw transaction data and splits into test set (comprised of users in `test_ids`) and full training set (the rest). Returns: the file names for the positive and negative training data, and the rate of positive fraud cases in the training data.
     """
@@ -128,6 +123,7 @@ def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[str, str, fl
     reader = make_txdata_reader()
     # in first iteration, overwrite file and write header
     writing_args = {'mode':'w', 'header':True}
+    test_df = pd.DataFrame()
     for df in reader:
         # read in the next training data
         df = next(reader)
@@ -138,9 +134,11 @@ def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[str, str, fl
         # construct needed features
         df = user_features(df)
 
-        # filter and save data from users in the test set
-        test_df = df[df.user.isin(test_ids)]
-        test_df.to_csv(test_file, **writing_args)
+        # filter and retain data from users in the test set
+        if len(test_df) is 0:
+            test_df = df[df.user.isin(test_ids)].copy()
+        else:
+            test_df = pd.concat([test_df, df[df.user.isin(test_ids)]])
 
         # split the training pool into fraud and non-fraud observations
         train_df = df[~df.user.isin(test_ids)]
@@ -151,24 +149,32 @@ def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[str, str, fl
         
         # after first iteration mode is append and header should not be written
         writing_args = {'mode': 'a', 'header':False}
+    
+    test_df.sort_values(['user', 'timestamp'], inplace=True)
+    test_df.drop(columns=['timestamp'], inplace=True)
+    test_df.to_csv(test_file)
 
     return save_file_pos, save_file_neg, pos_count / n
 
 
-def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[str, str, str]:
+def make_training_sets(subset_ids, pos_filename:Path, neg_filename:Path, rate) -> Tuple[Path, Path, Path]:
     """
-    Constructs and saves two training data sets from the full training data recorded in `pos_filename` and `neg_filename`, returning 3 file name:
-    - An unbalanced set containing users in `subset_ids`
+    Constructs and saves two training data sets from the full training data recorded in `pos_filename` and `neg_filename`, returning 3 file names:
+    - An unbalanced set containing users in `subset_ids` or all training examples if `None`. This set is sorted by user and timestamp
     - A balanced set combining all positive cases and negative cases selected at `rate`
     - The fraud rates by MCC code
     """
     rng = np.random.default_rng(22)
-    subset_name = prepend_dir('tx_train_set.csv')
+    sequence_name = prepend_dir('tx_train_set.csv')
     balanced_name = prepend_dir('tx_train_balanced.csv')
     mcc_rates_name = prepend_dir('mcc_rates.csv')
 
     balanced_df = pd.read_csv(pos_filename, index_col=0)
-    subset_df = balanced_df[balanced_df.user.isin(subset_ids)].copy()
+    sequence_selection = (
+        lambda df: df[df.user.isin(subset_ids)] if subset_ids is not None
+        else df
+    )
+    sequence_df = sequence_selection(balanced_df).copy()
 
     mcc_dict = {}
     update_mcc(balanced_df, mcc_dict)
@@ -182,12 +188,14 @@ def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[st
         
         update_mcc(df, mcc_dict)
 
-        subset_df = pd.concat([subset_df, df[df.user.isin(subset_ids)]])
+        sequence_df = pd.concat([sequence_df, sequence_selection(df)])
     
-    subset_df.sort_values(['user', 'card'], inplace=True)
-    subset_df.to_csv(subset_name)
+    sequence_df.sort_values(['user', 'timestamp'], inplace=True)
+    sequence_df.drop(columns=['timestamp'], inplace=True)
+    sequence_df.to_csv(sequence_name)
 
-    balanced_df.sort_values(['user', 'card'], inplace=True)
+    balanced_df.sort_values(['user', 'card', 'timestamp'], inplace=True)
+    balanced_df.drop(columns=['timestamp'], inplace=True)
     balanced_df.to_csv(balanced_name)
 
     mcc_rates = pd.DataFrame.from_dict(mcc_dict, orient='index')
@@ -195,12 +203,12 @@ def make_training_sets(subset_ids, pos_filename, neg_filename, rate) -> Tuple[st
     mcc_rates['mcc_fraud_rate'] = mcc_rates['pos'] / mcc_rates['n']
     mcc_rates[['mcc_fraud_rate']].to_csv(mcc_rates_name)
 
-    return subset_name, balanced_name, mcc_rates_name
+    return sequence_name, balanced_name, mcc_rates_name
 
 
 def save_model(name, model):
     confirm_dirs(model_dir)
-    filename = model_dir+'/'+name+time.strftime(r'%Y%m%d%H%M',time.localtime())+'.pkl'
+    filename = model_dir / (name+time.strftime(r'%Y%m%d%H%M',time.localtime())+'.pkl')
     with open(filename, 'wb') as f:
         pickle.dump(model, f)
 
@@ -296,7 +304,7 @@ def user_features(df: pd.DataFrame) -> pd.DataFrame:
     merged_df['since_opened'] = (merged_df.timestamp - merged_df.acct_open_date).dt.days
 
     # dropping unneeded columns
-    redundant_cols = ['merchant_city', 'merchant_state', 'zip', 'city', 'state', 'zipcode', 'birthdate', 'retirement_age', 'expires', 'acct_open_date', 'timestamp']
+    redundant_cols = ['merchant_city', 'merchant_state', 'zip', 'city', 'state', 'zipcode', 'birthdate', 'retirement_age', 'expires', 'acct_open_date']
     merged_df.drop(columns=redundant_cols, inplace=True)
 
     return merged_df
