@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from urllib import request
 from zipfile import ZipFile
-from typing import Tuple, Union, List
+from typing import Union
 from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
 from pathlib import Path
 
@@ -110,7 +110,7 @@ def save_data(dfdict, **kwargs):
         df.to_csv(dirname / filename, **kwargs)
 
 
-def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[Path, Path, float]:
+def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> tuple[Path, Path, float]:
     """
     Processes raw transaction data and splits into test set (comprised of users in `test_ids`) and full training set (the rest). Returns: the file names for the positive and negative training data, and the rate of positive fraud cases in the training data.
     """
@@ -157,7 +157,7 @@ def clean_split_tx(users_cards_df: pd.DataFrame, test_ids) -> Tuple[Path, Path, 
     return save_file_pos, save_file_neg, pos_count / n
 
 
-def make_training_sets(subset_ids, pos_filename:Path, neg_filename:Path, rate) -> Tuple[Path, Path, Path]:
+def make_training_sets(subset_ids, pos_filename:Path, neg_filename:Path, rate) -> tuple[Path, Path, Path]:
     """
     Constructs and saves two training data sets from the full training data recorded in `pos_filename` and `neg_filename`, returning 3 file names:
     - An unbalanced set containing users in `subset_ids` or all training examples if `None`. This set is sorted by user and timestamp
@@ -310,7 +310,7 @@ def user_features(df: pd.DataFrame) -> pd.DataFrame:
     return merged_df
 
 
-def convert_multicat(df: pd.DataFrame, colname: str, copy:bool=True) -> Tuple[pd.DataFrame, List[str]]:
+def convert_multicat(df: pd.DataFrame, colname: str, copy:bool=True) -> tuple[pd.DataFrame, list[str]]:
     '''(Optionally copies `df` and) converts the categorical column `colname` into dummies. Allows for membership in multiple categories separated by a single comma, e.g. entry "a,b" will be converted into `True` for columns `a` and `b`'''
     if copy:
         dummy_df = df.copy()
@@ -351,7 +351,7 @@ def update_mcc(new_data, mcc_dict):
 
 class MakeDummies(BaseEstimator, TransformerMixin):
     """Transforms categorical columns into dummies. Can handle multi-category columns"""
-    def __init__(self, multicat_col: str, drop_first=True, dummy_cols:Union[List[str], str]='auto') -> None:
+    def __init__(self, multicat_col: str, drop_first=True, dummy_cols:Union[list[str], str]='auto') -> None:
         super().__init__()
         self.multicat_col = multicat_col
         self.drop_first = drop_first
